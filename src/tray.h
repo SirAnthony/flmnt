@@ -8,12 +8,13 @@
 #ifndef TRAY_H_
 #define TRAY_H_
 
-#include <gtk/gtk.h>
-#include "mount.h"
+#include "device.h"
 
-int tray_create_icon( );
-int tray_add_item( struct device_item* );
-int tray_remove_item( struct device_item* );
+int tray_init( int *argc, char ***argv );
+int tray_run();
+
+int tray_add_item( struct Device* );
+int tray_remove_item( struct Device* );
 
 
 #endif /* TRAY_H_ */
