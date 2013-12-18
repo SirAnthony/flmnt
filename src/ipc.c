@@ -25,60 +25,72 @@ static GIOChannel* client_channel = NULL;
 
 static gboolean fifo_read( GIOChannel* ch, GIOCondition condition, gpointer data )
 {
-	gsize len, tp;
-	gchar *buf, *tmp, *all = NULL;
-	GIOStatus rv;
+	gsize len, rv, oldlen;
+	gchar *buf, *resvd = NULL;
+	GError *err = NULL;
 	struct Device* dev = NULL;
 
-	do{
-		GError *err = NULL;
-		rv = g_io_channel_read_line( ch, &buf, &len, &tp, &err );
-		if( buf ){
-			if( tp )
-				buf[tp] = '\0';
-			device_init_from_data( &dev, buf );
-			g_free( buf );
-		}else{
-			buf = g_malloc( BUF_SIZE + 1 );
-			while( TRUE ){
-				buf[BUF_SIZE] = '\0';
-				g_io_channel_read_chars( ch, buf, BUF_SIZE, &len, &err );
-				if( len ){
-					buf[len] = '\0';
-					if( all ){
-						tmp = all;
-						all = g_strdup_printf( "%s%s", tmp, buf );
-						g_free( tmp );
-					}else{
-						all = g_strdup( buf );
-					}
-				}else{
-					break;
-				}
-			}
-			if( all ){
-				device_init_from_data( &dev, buf );
-				g_free( all );
-			}
-			g_free( buf );
-		}
-		if( err ){
-			g_error( "fifo_cb: %s", err->message );
-			g_free( err );
+	buf = g_malloc(BUF_SIZE + 1);
+	oldlen = 1;
+
+	do {
+		err = NULL;
+		buf[BUF_SIZE] = '\0';
+		rv = g_io_channel_read_chars(ch, buf, BUF_SIZE, &len, &err);
+		if (!len)
+			break;
+		resvd = (gchar*) g_realloc(resvd, oldlen + len);
+		memcpy(&resvd[oldlen - 1], buf, len);
+		oldlen += len;
+		resvd[oldlen] = '\0';
+		if (err) {
+			g_error("fifo_cb: %s", err->message);
+			g_free(err);
 			break;
 		}
-	} while( (len) && (rv == G_IO_STATUS_NORMAL) );
+	} while ((len) && (rv == G_IO_STATUS_NORMAL));
 
-	if( dev )
-		mount_add_device( dev );
+	if (resvd) {
+		if (device_init_from_data(&dev, resvd) >= 0)
+			mount_add_device(dev);
+		g_free(resvd);
+	}
+	g_free(buf);
 
 	return TRUE;
 }
 
 
+static int ipc_close_channel( GIOChannel* channel )
+{
+	GError* error = NULL;
+	int socket;
+
+	if (!channel)
+		return 1;
+
+	socket = g_io_channel_unix_get_fd(client_channel);
+	g_io_channel_shutdown(client_channel, TRUE, &error);
+	if( error ){
+		printf( "Error %s occured while channel closing.", error->message );
+		return -2;
+	}
+	close(socket);
+	return 0;
+}
+
+
 static int ipc_role_client_init( int socket )
 {
+	GError* error = NULL;
 	client_channel = g_io_channel_unix_new( socket );
+	g_io_channel_set_encoding( client_channel, NULL, &error );
+	if( error ){
+		printf( "Error %s occured while encoding setup.", error->message );
+		ipc_close_channel(server_channel);
+		return -2;
+	}
+
 	return 0;
 }
 
@@ -90,6 +102,12 @@ static int ipc_role_server_init( int socket )
 
 	server_channel = g_io_channel_unix_new( socket );
 	g_io_channel_set_encoding( server_channel, NULL, &error );
+	if( error ){
+		printf( "Error %s occured while encoding setup.", error->message );
+		ipc_close_channel(server_channel);
+		return -2;
+	}
+
 	g_io_add_watch( server_channel, G_IO_IN | G_IO_PRI, fifo_read, NULL );
 
 	client_socket = open( fifo_file, O_WRONLY | O_NONBLOCK );
@@ -109,7 +127,7 @@ static int init_fifo( int* socket )
 
 	if( mkfifo( fifo_file, 0600 ) == -1 ){
 		if( errno != EEXIST ){
-			printf( "Error occured : %s\n", strerror( errno) );
+			printf( "Error occured in fifo init: %s\n", strerror(errno) );
 			return -1;
 		}
 		status = IPC_CLIENT;
@@ -121,18 +139,6 @@ static int init_fifo( int* socket )
 		return -2;
 
 	return status;
-}
-
-
-static int ipc_close_channel( GIOChannel* channel )
-{
-	int socket;
-	if( !channel )
-		return 1;
-	socket = g_io_channel_unix_get_fd( client_channel );
-	g_io_channel_close( client_channel );
-	close( socket );
-	return 0;
 }
 
 
@@ -160,15 +166,22 @@ int ipc_select_role(  )
 
 	switch( role ){
 		case IPC_SERVER:
-			ipc_role_server_init( socket );
+			if (ipc_role_server_init(socket) < 0){
+				ipc_server_finalize();
+				return -1;
+			}
 			break;
 		case IPC_CLIENT:
-			ipc_role_client_init( socket );
+			if (ipc_role_client_init(socket) < 0){
+				ipc_client_finalize();
+				return -1;
+			}
 			break;
 		default:
-			printf( "Error occured: %s\n", strerror( errno) );
+			printf("Error occured in role selection: %s\n", strerror(errno));
 			break;
 	}
+
 	return role;
 }
 
@@ -177,12 +190,14 @@ int ipc_register_device( struct Device* device )
 {
 	GError* error = NULL;
 	gsize device_size, written;
+	const gchar* dev_ptr;
 	if( !device || !client_channel )
 		return -1;
 
+	dev_ptr = (const gchar*)device;
 	device_size = sizeof(struct Device);
 
-	g_io_channel_write_chars( client_channel, (void*)device, device_size, &written, &error);
+	g_io_channel_write_chars( client_channel, dev_ptr, device_size, &written, &error);
 	if( error ){
 		printf( "Error %s occured while data transfer.", error->message );
 		return -2;

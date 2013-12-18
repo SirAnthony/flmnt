@@ -17,55 +17,71 @@ const char* DEFAULT_OPTS = "rw,noatime,flush,users";
 		//"rw,noatime,flush,uid=1000,iocharset=utf8,codepage=866,users"
 const char* DEFAULT_TARGET = "/media/flash/%s";
 
-
-int device_init_from_data( struct Device** tgt, char* data )
+static int copy_env(char* dst, const char* name, size_t size)
 {
-	if( !data )
+	char* env_str;
+	if (!dst)
+		return -1;
+	dst[0] = '\0';
+
+	env_str = getenv(name);
+	if (!env_str)
 		return -1;
 
-	if( !*tgt )
-		*tgt = malloc( DEVICE_SIZE );
-
-	memcpy( *tgt, data, DEVICE_SIZE );
+	strncpy(dst, env_str, size);
 	return 0;
 }
 
 
-int device_init_from_env( struct Device* ditem )
+int device_init_from_data(struct Device** tgt, char* data)
+{
+	if (!data)
+		return -1;
+
+	if (!*tgt)
+		*tgt = malloc(DEVICE_SIZE);
+
+	memcpy(*tgt, data, DEVICE_SIZE);
+	return 0;
+}
+
+
+int device_init_from_env(struct Device* ditem)
 {
 	char* base;
+	char* source;
 
-
-	strncpy( &ditem->source[0], getenv("mount_device"), DEV_MAX_PATH);
-	if( ditem->source[0] == '\0' ){
+	if (copy_env(ditem->source, "mount_device", DEV_MAX_PATH) < 0 ||
+			ditem->source == '\0') {
 		printf("Device not specified. Exit.");
 		return -1;
 	}
 
-	strncpy( ditem->fstype, getenv("mount_fstype"), DEV_MAX_INFO);
-	if( ditem->fstype[0] == '\0' ){
+	if (copy_env(ditem->fstype, "mount_fstype", DEV_MAX_INFO) < 0 ||
+			ditem->fstype == '\0') {
 		printf("Device filesystem type not specified. Exit.");
 		return -2;
 	}
 
-	base = basename( ditem->source );
+	source = strdup(ditem->source);
+	base = basename(source);
 
-	strncpy(ditem->name, getenv("mount_name"), DEV_MAX_INFO);
-	if( ditem->name[0] == '\0' )
-		strncpy( ditem->name, base, DEV_MAX_INFO );
+	if (copy_env(ditem->name, "mount_name", DEV_MAX_INFO) < 0 ||
+			ditem->name == '\0')
+		strncpy(ditem->name, base, DEV_MAX_INFO);
 
-	strncpy(ditem->target, getenv("mount_target"), DEV_MAX_PATH);
-	if( ditem->target[0] == '\0' )
-		snprintf( ditem->target, DEV_MAX_PATH, DEFAULT_TARGET, base );
+	if (copy_env(ditem->target, "mount_target", DEV_MAX_PATH) < 0 ||
+			ditem->target == '\0')
+		snprintf(ditem->target, DEV_MAX_PATH, DEFAULT_TARGET, base);
 
-	strncpy(ditem->options, getenv("mount_options"), DEV_MAX_PATH);
-	if( ditem->options[0] == '\0' )
+	if (copy_env(ditem->options, "mount_options", DEV_MAX_PATH) < 0 ||
+			ditem->options == '\0')
 		strncpy(ditem->options, DEFAULT_OPTS, DEV_MAX_PATH);
 
 	ditem->mounted = 0;
 	ditem->id = -1;
 
-	free(base);
+	free(source);
 
 	return 0;
 }

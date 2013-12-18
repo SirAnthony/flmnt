@@ -18,10 +18,11 @@ static GArray* attached_devices;
 static int last_device_id = 0;
 
 
-static void mount_remove_item( struct Device* ditem )
+static void mount_remove_item(struct Device* ditem)
 {
-	g_signal_emit_by_name( NULL, "device_unmounted", 0, ditem->id );
-	device_free( ditem );
+	gpointer obj = tray_get_menu();
+	g_signal_emit_by_name(obj, "device-unmounted", 0, ditem);
+	device_free(ditem);
 }
 
 
@@ -29,32 +30,33 @@ static void mount_remove_item( struct Device* ditem )
 /***************************PUBLIC METHODS*********************************/
 /**************************************************************************/
 
-void mount_init( )
+void mount_init()
 {
-	attached_devices = g_array_new( FALSE, FALSE, sizeof(struct Device*) );
+	attached_devices = g_array_new(FALSE, FALSE, sizeof(struct Device*));
 }
 
 
-void mount_clean( )
+void mount_clean()
 {
 	int index;
 	struct Device* ditem;
-	for( index = 0; index < attached_devices->len; ++index ){
+	for (index = 0; index < attached_devices->len; ++index) {
 		ditem = g_array_index( attached_devices, struct Device*, index ) ;
 		mount_remove_item( ditem );
 	}
-	g_array_free( attached_devices, FALSE);
+	g_array_free(attached_devices, FALSE);
 }
 
 
-int mount_add_device( struct Device* device )
+int mount_add_device(struct Device* device)
 {
-	if( !device )
+	if (!device)
 		return 0;
 
 	device->id = last_device_id++;
-	g_array_append_val( attached_devices, device );
-	g_signal_emit_by_name( NULL, "device_mounted", 0, device->id );
+	g_array_append_val(attached_devices, device);
+	gpointer obj = tray_get_menu();
+	g_signal_emit_by_name(obj, "device-mounted", 0, device);
 	return 1;
 }
 

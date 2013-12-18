@@ -28,7 +28,6 @@ int main(int argc, char **argv) {
 
 	ipc_finalize( IPC_CLIENT );
 
-
 	// Run application
 	if( role == IPC_SERVER ){
 		tray_run();
