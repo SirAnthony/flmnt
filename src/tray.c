@@ -6,19 +6,57 @@
  */
 
 #include "tray.h"
-#include "device.h"
-#include <stdlib.h>
-#include <gtk/gtk.h>
+#include "tray_gtk.h"
+
+G_DEFINE_TYPE(TrayWidget, tray_widget, G_TYPE_OBJECT);
 
 
+enum {
+	DEVICE_MOUNTED,
+	DEVICE_UNMOUNTED,
+	LAST_SIGNAL
+};
+
+
+static guint gui_signals[LAST_SIGNAL] = { 0 };
 static GtkWidget* tray_menu = NULL;
 static GtkStatusIcon* tray_icon = NULL;
-GHashTable* devices = NULL;
+static GHashTable* devices = NULL;
+static GObject *tray_widget = NULL;
 
-static struct {
-	guint mount;
-	guint unmount;
-} signals;
+
+
+static void tray_widget_init(TrayWidget *self)
+{
+
+}
+
+static void tray_signals_init(GObjectClass *gobject_class)
+{
+	gui_signals[DEVICE_MOUNTED] =
+			g_signal_new("device-mounted",
+					G_TYPE_FROM_CLASS(gobject_class),
+					G_SIGNAL_RUN_FIRST,
+					G_STRUCT_OFFSET(TrayWidgetClass, device_mounted),
+					NULL, NULL,
+					g_cclosure_marshal_VOID__POINTER,
+					G_TYPE_NONE, 1, G_TYPE_POINTER);
+	gui_signals[DEVICE_UNMOUNTED] =
+			g_signal_new("device-unmounted",
+					G_TYPE_FROM_CLASS(gobject_class),
+					G_SIGNAL_RUN_FIRST,
+					G_STRUCT_OFFSET(TrayWidgetClass, device_unmounted),
+					NULL, NULL,
+					g_cclosure_marshal_VOID__POINTER,
+					G_TYPE_NONE, 1, G_TYPE_POINTER);
+}
+
+static void tray_widget_class_init(TrayWidgetClass *klass)
+{
+	GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
+	tray_signals_init(gobject_class);
+}
+
 
 
 static void tray_menu_deactivate(GtkMenuShell *menushell, gpointer user_data)
@@ -40,6 +78,13 @@ static gboolean tray_icon_on_click( GtkStatusIcon *status_icon,
 	g_signal_connect( tray_menu, "deactivate", G_CALLBACK(tray_menu_deactivate), NULL );
 	gtk_menu_popup( menu, NULL, NULL, NULL, NULL, event->button, event->time );
 	gtk_widget_set_state( gtk_menu_get_attach_widget( menu ), GTK_STATE_SELECTED );
+	return TRUE;
+}
+
+static gboolean tray_menu_on_close(GtkStatusIcon *status_icon,
+					GdkEventButton* event, gpointer user_data)
+{
+	gtk_main_quit();
 	return TRUE;
 }
 
@@ -83,6 +128,7 @@ static int tray_create_icon( )
 	GtkIconTheme* theme;
 	GdkPixbuf* pixbuf;
 	GError* error = NULL;
+	GtkWidget* menu_item;
 	int icon_size = 64;
 	gchar *icons[] = { "media-flash" };
 
@@ -114,6 +160,17 @@ static int tray_create_icon( )
 	gtk_status_icon_set_tooltip( tray_icon, "Mounted devices" );
 	gtk_status_icon_set_visible( tray_icon, TRUE );
 
+	/* Add close button */
+	menu_item = gtk_image_menu_item_new_from_stock(GTK_STOCK_CLOSE, NULL);
+	gtk_widget_show_all(menu_item);
+	gtk_menu_shell_prepend(GTK_MENU_SHELL(tray_menu), menu_item);
+	g_signal_connect(G_OBJECT( menu_item ), "button_press_event",
+				G_CALLBACK( tray_menu_on_close ), NULL);
+	/* Add h-line */
+	menu_item = gtk_separator_menu_item_new();
+	gtk_widget_show_all(menu_item);
+	gtk_menu_shell_prepend(GTK_MENU_SHELL(tray_menu), menu_item);
+
 	gtk_widget_show_all( tray_menu );
 
 	return 0;
@@ -128,18 +185,11 @@ static int tray_create_icon( )
 int tray_init( int *argc, char ***argv )
 {
 	gtk_init( argc, argv );
+	tray_widget = g_object_new(TRAY_TYPE_WIDGET, NULL);
 	devices = g_hash_table_new_full(g_int_hash, g_int_equal, free, NULL);
 	tray_create_icon( );
-	signals.mount = g_signal_new("device-mounted", G_OBJECT_CLASS_TYPE(tray_menu),
-									G_SIGNAL_RUN_LAST, 0, NULL, NULL,
-									g_cclosure_marshal_VOID__POINTER, G_TYPE_NONE,
-									1, G_TYPE_POINTER);
-	signals.unmount = g_signal_new("device-unmounted", G_OBJECT_CLASS_TYPE(tray_menu),
-									G_SIGNAL_RUN_LAST, 0, NULL, NULL,
-									g_cclosure_marshal_VOID__POINTER, G_TYPE_NONE,
-									1, G_TYPE_POINTER);
-	g_signal_connect(tray_menu, "device-mounted", G_CALLBACK(tray_item_add), NULL);
-	g_signal_connect(tray_menu, "device-unmounted", G_CALLBACK(tray_item_remove), NULL);
+	g_signal_connect(tray_widget, "device-mounted", G_CALLBACK(tray_item_add), NULL);
+	g_signal_connect(tray_widget, "device-unmounted", G_CALLBACK(tray_item_remove), NULL);
 	return 0;
 }
 
@@ -150,7 +200,18 @@ int tray_run()
 	return 0;
 }
 
-void* tray_get_menu()
+void tray_signal_emit(const char *name, ...)
 {
-	return tray_menu;
+	guint signal_id;
+	g_return_if_fail(tray_widget != NULL);
+
+	if (g_signal_parse_name(name, G_TYPE_FROM_INSTANCE(tray_widget), &signal_id, NULL, FALSE)) {
+		va_list var_args;
+		va_start(var_args, name);
+		g_signal_emit_valist(tray_widget, signal_id, 0, var_args);
+		va_end(var_args);
+	} else
+		g_warning("%s: signal '%s' not found", G_STRLOC, name);
 }
+
+

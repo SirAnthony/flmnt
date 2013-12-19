@@ -20,8 +20,7 @@ static int last_device_id = 0;
 
 static void mount_remove_item(struct Device* ditem)
 {
-	gpointer obj = tray_get_menu();
-	g_signal_emit_by_name(obj, "device-unmounted", 0, ditem);
+	tray_signal_emit("device-unmounted", ditem);
 	device_free(ditem);
 }
 
@@ -55,8 +54,7 @@ int mount_add_device(struct Device* device)
 
 	device->id = last_device_id++;
 	g_array_append_val(attached_devices, device);
-	gpointer obj = tray_get_menu();
-	g_signal_emit_by_name(obj, "device-mounted", 0, device);
+	tray_signal_emit("device-mounted", device);
 	return 1;
 }
 

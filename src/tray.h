@@ -10,6 +10,6 @@
 
 int tray_init(int *argc, char ***argv);
 int tray_run();
-void* tray_get_menu();
+void tray_signal_emit(const char *name, ...);
 
 #endif /* TRAY_H_ */
