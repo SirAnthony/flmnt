@@ -3,20 +3,25 @@
 #include "mount.h"
 #include "ipc.h"
 #include "tray.h"
+#include "utils.h"
 
 
 int main(int argc, char **argv) {
 	struct Device device;
 	int role;
+	log_init("/var/log/flmnt.log");
 
 	role = ipc_select_role();
 
-	// TODO: finalize on error
-	if( role < 0 )
+	if( role < 0 ){
+		log_close();
 		return 1;
+	}
 
-	if( device_init_from_env( &device ) < 0 )
+	if( device_init_from_env( &device ) < 0 ){
+		log_close();
 		return 1;
+	}
 
 	// Initialize server stuff
 	if( role == IPC_SERVER ){
@@ -34,6 +39,8 @@ int main(int argc, char **argv) {
 		mount_clean();
 		ipc_finalize( IPC_SERVER );
 	}
+
+	log_close();
 
 	return 0;
 }

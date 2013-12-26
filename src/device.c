@@ -10,6 +10,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <libgen.h>
+#include "utils.h"
 
 
 const unsigned int DEVICE_SIZE = sizeof(struct Device);
@@ -53,13 +54,13 @@ int device_init_from_env(struct Device* ditem)
 
 	if (copy_env(ditem->source, "mount_device", DEV_MAX_PATH) < 0 ||
 			ditem->source == '\0') {
-		printf("Device not specified. Exit.");
+		g_warning("Device not specified. Exit.");
 		return -1;
 	}
 
 	if (copy_env(ditem->fstype, "mount_fstype", DEV_MAX_INFO) < 0 ||
 			ditem->fstype == '\0') {
-		printf("Device filesystem type not specified. Exit.");
+		g_warning("Device filesystem type not specified. Exit.");
 		return -2;
 	}
 

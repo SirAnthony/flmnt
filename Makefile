@@ -12,7 +12,7 @@ OUTDIR= bin/
 VPATH= src/
 
 
-SRCS = device.c ipc.c mount.c tray.c main.c
+SRCS = utils.c device.c ipc.c mount.c tray.c main.c 
 OBJ = $(SRCS:.c=.o)
 OBJS = $(addprefix $(OBJDIR), $(OBJ:.c=.o)) 
 

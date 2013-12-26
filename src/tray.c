@@ -7,6 +7,8 @@
 
 #include "tray.h"
 #include "tray_gtk.h"
+#include "mount.h"
+
 
 G_DEFINE_TYPE(TrayWidget, tray_widget, G_TYPE_OBJECT);
 
@@ -88,9 +90,9 @@ static gboolean tray_menu_on_close(GtkStatusIcon *status_icon,
 	return TRUE;
 }
 
-static int tray_remove_device(GtkWidget *w, const struct Device* item)
+static void tray_remove_device(GtkWidget *w, struct Device* item)
 {
-	return -1;
+	mount_remove_device(item);
 }
 
 static void tray_item_add(GtkWidget *w, struct Device* item)
@@ -103,8 +105,8 @@ static void tray_item_add(GtkWidget *w, struct Device* item)
 	menu_item = gtk_menu_item_new_with_label(item->name);
 	gtk_widget_show_all(menu_item);
 	gtk_menu_shell_prepend(GTK_MENU_SHELL(tray_menu), menu_item);
-	g_signal_connect(G_OBJECT( menu_item ), "activate",
-			G_CALLBACK( tray_remove_device ), item);
+	g_signal_connect(G_OBJECT(menu_item), "activate",
+					G_CALLBACK(tray_remove_device), item);
 	id = (int*)malloc(sizeof(int));
 	*id = item->id;
 	g_hash_table_insert(devices, id, menu_item);
@@ -147,7 +149,7 @@ static int tray_create_icon( )
 	pixbuf = gtk_icon_theme_load_icon( theme, icons[0], icon_size,
 				GTK_ICON_LOOKUP_USE_BUILTIN, &error );
 	if( error ){
-		printf( "load icon: %s", error->message );
+		g_warning( "load icon: %s", error->message );
 		tray_icon = gtk_status_icon_new( );
 	}else{
 		tray_icon = gtk_status_icon_new_from_pixbuf( pixbuf );
@@ -184,6 +186,7 @@ static int tray_create_icon( )
 
 int tray_init( int *argc, char ***argv )
 {
+	g_debug("Launching tray icon.");
 	gtk_init( argc, argv );
 	tray_widget = g_object_new(TRAY_TYPE_WIDGET, NULL);
 	devices = g_hash_table_new_full(g_int_hash, g_int_equal, free, NULL);

@@ -44,7 +44,7 @@ static gboolean fifo_read( GIOChannel* ch, GIOCondition condition, gpointer data
 		oldlen += len;
 		resvd[oldlen] = '\0';
 		if (err) {
-			g_error("fifo_cb: %s", err->message);
+			g_warning("fifo_cb: %s", err->message);
 			g_free(err);
 			break;
 		}
@@ -72,7 +72,7 @@ static int ipc_close_channel( GIOChannel* channel )
 	socket = g_io_channel_unix_get_fd(client_channel);
 	g_io_channel_shutdown(client_channel, TRUE, &error);
 	if( error ){
-		printf( "Error %s occured while channel closing.", error->message );
+		g_warning( "Error %s occured while channel closing.", error->message );
 		return -2;
 	}
 	close(socket);
@@ -86,7 +86,7 @@ static int ipc_role_client_init( int socket )
 	client_channel = g_io_channel_unix_new( socket );
 	g_io_channel_set_encoding( client_channel, NULL, &error );
 	if( error ){
-		printf( "Error %s occured while encoding setup.", error->message );
+		g_warning( "Error %s occured while encoding setup.", error->message );
 		ipc_close_channel(server_channel);
 		return -2;
 	}
@@ -100,10 +100,12 @@ static int ipc_role_server_init( int socket )
 	GError* error = NULL;
 	int client_socket;
 
+	g_message("Starting mount server.");
+
 	server_channel = g_io_channel_unix_new( socket );
 	g_io_channel_set_encoding( server_channel, NULL, &error );
 	if( error ){
-		printf( "Error %s occured while encoding setup.", error->message );
+		g_warning( "Error %s occured while encoding setup.", error->message );
 		ipc_close_channel(server_channel);
 		return -2;
 	}
@@ -112,7 +114,7 @@ static int ipc_role_server_init( int socket )
 
 	client_socket = open( fifo_file, O_WRONLY | O_NONBLOCK );
 	if( client_socket == -1 ){
-		printf( "Error occured while open client socket: %s\n", strerror( errno) );
+		g_warning( "Error occured while open client socket: %s", strerror( errno) );
 		return -1;
 	}
 
@@ -127,7 +129,7 @@ static int init_fifo( int* socket )
 
 	if( mkfifo( fifo_file, 0600 ) == -1 ){
 		if( errno != EEXIST ){
-			printf( "Error occured in fifo init: %s\n", strerror(errno) );
+			g_warning( "Error %i occured in fifo init: %s", errno, strerror(errno) );
 			return -1;
 		}
 		status = IPC_CLIENT;
@@ -151,6 +153,7 @@ static int ipc_client_finalize( )
 static int ipc_server_finalize( )
 {
 	int ret = ipc_close_channel( server_channel );
+	g_message("Closing mount server.");
 	unlink( fifo_file );
 	return ret;
 }
@@ -178,7 +181,7 @@ int ipc_select_role(  )
 			}
 			break;
 		default:
-			printf("Error occured in role selection: %s\n", strerror(errno));
+			g_warning("Error occured in role selection: %s", strerror(errno));
 			break;
 	}
 
@@ -197,9 +200,10 @@ int ipc_register_device( struct Device* device )
 	dev_ptr = (const gchar*)device;
 	device_size = sizeof(struct Device);
 
+	g_message("Registering device %s.", device->source);
 	g_io_channel_write_chars( client_channel, dev_ptr, device_size, &written, &error);
 	if( error ){
-		printf( "Error %s occured while data transfer.", error->message );
+		g_warning( "Error %s occured while data transfer.", error->message );
 		return -2;
 	}
 

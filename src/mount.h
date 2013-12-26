@@ -14,7 +14,7 @@ void mount_init();
 void mount_clean();
 
 int mount_add_device( struct Device* );
-int mount_remove_device( int id );
+int mount_remove_device( struct Device* );
 
 
 #endif /* MOUNT_H_ */
